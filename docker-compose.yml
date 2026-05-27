@@ -1,0 +1,204 @@
+version: "3.9"  # Versione del formato Compose; 3.9 è la più recente supportata da Compose v2
+
+# ============================================================
+# CoAP IoT Stack - Progetto didattico ITS 3° anno
+# Protocollo: CoAP su UDP (porta 5683)
+# Architettura: sensor → coap-gateway → InfluxDB ← Node-RED
+# ============================================================
+
+# 'networks' dichiara le reti virtuali Docker che isolano i container tra loro
+networks:
+  coap_sensor_net:    # Rete dedicata ai sensori: i sensori vedono solo il gateway (non InfluxDB, Mailhog, ecc.)
+    driver: bridge    # 'bridge' = rete privata interna all'host Docker; i container comunicano con hostname
+  coap_core_net:      # Rete interna per: gateway, InfluxDB, Node-RED, Mailhog, Chaos
+    driver: bridge    # Stesso driver: due reti separate garantiscono isolamento tra sensori e core
+
+# 'volumes' dichiara i volumi persistenti Docker (i dati sopravvivono al riavvio del container)
+volumes:
+  influxdb_data:      # Volume nominato; Docker lo gestisce in /var/lib/docker/volumes/ — non è un percorso host
+
+# ──────────────────────────────────────────────────────────────
+# YAML Anchor: blocco di configurazione condivisa per tutti i sensori
+# Sintassi YAML:
+#   '&nome'   → dichiara un'ancora (salva il blocco con quel nome)
+#   '<<: *nome' → merge key: espande e unisce tutte le chiavi dell'ancora
+# 'x-' → prefisso di estensione: Docker Compose ignora queste chiavi top-level
+# ──────────────────────────────────────────────────────────────
+x-sensor-defaults: &sensor-defaults   # &sensor-defaults = nome dell'ancora YAML
+  build: ./sensor                     # Costruisce l'immagine dal Dockerfile nella cartella ./sensor
+  networks:
+    - coap_sensor_net                 # I sensori appartengono solo alla rete dei sensori
+  restart: on-failure                 # Riavvia il container solo se il processo esce con codice != 0
+  environment:                        # Variabili d'ambiente iniettate nel container (lette da os.getenv in Python)
+    COAP_SERVER: coap-gateway         # Hostname del gateway: Docker risolve 'coap-gateway' via DNS interno
+    COAP_PORT: 5683                   # Porta standard CoAP assegnata da IANA (RFC 7252)
+    SEND_INTERVAL: 5                  # Secondi tra un invio e l'altro (letto da sensor.py con os.getenv)
+
+# 'services' è il blocco principale: ogni chiave è un container separato
+services:
+
+  # ── Sensori (10 istanze) ────────────────────────────────────
+  sensor-01:              # Nome del servizio = hostname Docker interno (usabile da altri container)
+    <<: *sensor-defaults  # YAML merge: espande tutte le chiavi di sensor-defaults in questo blocco
+    environment:          # 'environment' sovrascrive/aggiunge rispetto all'ancora (merge YAML)
+      COAP_SERVER: coap-gateway
+      COAP_PORT: 5683
+      SEND_INTERVAL: 5
+      SENSOR_ID: sensor-01  # Identificativo univoco del sensore, letto da os.getenv("SENSOR_ID")
+
+  sensor-02:
+    <<: *sensor-defaults
+    environment:
+      COAP_SERVER: coap-gateway
+      COAP_PORT: 5683
+      SEND_INTERVAL: 5
+      SENSOR_ID: sensor-02
+
+  sensor-03:
+    <<: *sensor-defaults
+    environment:
+      COAP_SERVER: coap-gateway
+      COAP_PORT: 5683
+      SEND_INTERVAL: 5
+      SENSOR_ID: sensor-03
+
+  sensor-04:
+    <<: *sensor-defaults
+    environment:
+      COAP_SERVER: coap-gateway
+      COAP_PORT: 5683
+      SEND_INTERVAL: 5
+      SENSOR_ID: sensor-04
+
+  sensor-05:
+    <<: *sensor-defaults
+    environment:
+      COAP_SERVER: coap-gateway
+      COAP_PORT: 5683
+      SEND_INTERVAL: 5
+      SENSOR_ID: sensor-05
+
+  sensor-06:
+    <<: *sensor-defaults
+    environment:
+      COAP_SERVER: coap-gateway
+      COAP_PORT: 5683
+      SEND_INTERVAL: 5
+      SENSOR_ID: sensor-06
+
+  sensor-07:
+    <<: *sensor-defaults
+    environment:
+      COAP_SERVER: coap-gateway
+      COAP_PORT: 5683
+      SEND_INTERVAL: 5
+      SENSOR_ID: sensor-07
+
+  sensor-08:
+    <<: *sensor-defaults
+    environment:
+      COAP_SERVER: coap-gateway
+      COAP_PORT: 5683
+      SEND_INTERVAL: 5
+      SENSOR_ID: sensor-08
+
+  sensor-09:
+    <<: *sensor-defaults
+    environment:
+      COAP_SERVER: coap-gateway
+      COAP_PORT: 5683
+      SEND_INTERVAL: 5
+      SENSOR_ID: sensor-09
+
+  sensor-10:
+    <<: *sensor-defaults
+    environment:
+      COAP_SERVER: coap-gateway
+      COAP_PORT: 5683
+      SEND_INTERVAL: 5
+      SENSOR_ID: sensor-10
+
+  # ── CoAP Gateway ────────────────────────────────────────────
+  coap-gateway:
+    build: ./coap-gateway              # Usa il Dockerfile in ./coap-gateway (immagine Python custom)
+    container_name: coap-gateway       # Forza il nome del container (utile per 'docker logs coap-gateway')
+    networks:
+      - coap_sensor_net                # Può ricevere dai sensori
+      - coap_core_net                  # Può scrivere su InfluxDB
+    ports:
+      - "5683:5683/udp"               # formato host:container/protocollo — /udp obbligatorio (default sarebbe TCP!)
+    depends_on:                        # Ordine di avvio: il gateway parte solo dopo influxdb
+      influxdb:
+        condition: service_healthy     # 'service_healthy' = aspetta che l'healthcheck di influxdb passi
+    restart: unless-stopped            # Riavvia sempre, tranne se fermato esplicitamente con 'docker stop'
+    environment:
+      INFLUX_URL: http://influxdb:8086         # 'influxdb' è il nome del servizio → Docker lo risolve via DNS
+      INFLUX_TOKEN: ${INFLUX_TOKEN}            # ${VAR}: legge la variabile dal file .env nella stessa directory
+      INFLUX_ORG: ${INFLUX_ORG}               # Il file .env non va committato (contiene segreti)
+      INFLUX_BUCKET: ${INFLUX_BUCKET}
+      COAP_PORT: 5683
+
+  # ── Node-RED (dashboard + alerting) ────────────────────────
+  nodered:
+    build: ./nodered                   # Immagine custom: aggiunge plugin npm all'immagine base nodered
+    container_name: node-red-coap
+    networks:
+      - coap_core_net                  # Solo rete interna: non vede i sensori direttamente
+    ports:
+      - "1880:1880"                    # Interfaccia web Node-RED → apri http://localhost:1880
+    volumes:
+      - ./nodered/data:/data           # Bind mount: percorso host → percorso container; i flussi sono su disco
+    restart: unless-stopped
+
+  # ── InfluxDB v2 (time-series database) ─────────────────────
+  influxdb:
+    image: influxdb:2                  # 'image' usa Docker Hub direttamente (nessun Dockerfile custom)
+    container_name: influxdb-coap
+    networks:
+      - coap_core_net
+    ports:
+      - "8086:8086"                    # Interfaccia HTTP InfluxDB → http://localhost:8086 (UI + API)
+    volumes:
+      - influxdb_data:/var/lib/influxdb2  # Volume nominato (Docker lo gestisce): i dati sopravvivono ai restart
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup              # 'setup': inizializza automaticamente al primo avvio
+      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUX_USER}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUX_PASSWORD}
+      DOCKER_INFLUXDB_INIT_ORG: ${INFLUX_ORG}
+      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUX_BUCKET}
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUX_TOKEN}  # Token API per autenticazione (usato dal gateway)
+    healthcheck:                            # Docker usa questo per determinare quando il servizio è 'healthy'
+      test: ["CMD", "influx", "ping"]       # Forma EXEC: esegue 'influx ping' dentro il container; exit 0 = sano
+      interval: 10s                         # Ripete il check ogni 10 secondi
+      timeout: 5s                           # Se non risponde in 5s → il tentativo fallisce
+      retries: 5                            # Dopo 5 fallimenti consecutivi → stato 'unhealthy'
+      start_period: 30s                     # Ignora i fallimenti nei primi 30s (InfluxDB è lento ad avviarsi)
+    restart: unless-stopped
+
+  # ── Mailhog (fake SMTP per test email) ─────────────────────
+  mailhog:
+    image: mailhog/mailhog:v1.0.1           # Server SMTP finto: cattura le email senza inviarle davvero
+    container_name: mailhog-coap
+    networks:
+      - coap_core_net
+    ports:
+      - "4025:1025"    # SMTP: il container ascolta su 1025, esposto sull'host come 4025 (evita conflitti)
+      - "5025:8025"    # Web UI → http://localhost:5025 per vedere le email catturate in una inbox virtuale
+    restart: unless-stopped
+
+  # ── Chaos (simulatore di guasti di rete) ───────────────────
+  chaos:
+    build: ./chaos                          # Immagine docker:cli con bash+curl per manipolare la rete Docker
+    container_name: network-chaos-coap
+    networks:
+      - coap_sensor_net                     # Deve essere su entrambe le reti per poterle manipolare
+      - coap_core_net
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock   # Monta il socket Unix del daemon Docker (pattern DinD-lite)
+    environment:
+      SENSOR_NET: coap_sensor_net
+      CORE_NET: coap_core_net
+      DROP_INTERVAL: ${CHAOS_DROP_INTERVAL:-90}     # Sintassi ${VAR:-default}: usa 90 se CHAOS_DROP_INTERVAL non esiste
+      DROP_DURATION: ${CHAOS_DROP_DURATION:-20}     # Durata in secondi del guasto simulato
+      CHAOS_ENABLED: ${CHAOS_ENABLED:-true}         # Se 'false', il chaos monkey non agisce (utile per debug)
+    restart: unless-stopped

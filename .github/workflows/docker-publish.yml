@@ -1,0 +1,40 @@
+name: Build e Push coap-sensor su Docker Hub
+
+# Scatta quando si fa push su main e i file del sensore sono cambiati
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'sensor/**'
+      - '.github/workflows/docker-publish.yml'
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Scarica il codice della repo
+      - name: Checkout codice
+        uses: actions/checkout@v4
+
+      # 2. Abilita build multi-architettura (amd64 + arm64 per Raspberry Pi)
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 3. Login su Docker Hub con i segreti della repo GitHub
+      - name: Login su Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # 4. Build e push: due tag — latest e SHA del commit
+      - name: Build e push immagine sensore
+        uses: docker/build-push-action@v5
+        with:
+          context: ./sensor
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/coap-sensor:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/coap-sensor:${{ github.sha }}

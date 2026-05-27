@@ -1,0 +1,18 @@
+# Variabili d'ambiente — contengono token e password, NON vanno in git
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# macOS
+.DS_Store
+nodered/data/.DS_Store
+
+# Docker volumes locali
+influxdb_data/
+
+# Editor
+.vscode/
+*.swp

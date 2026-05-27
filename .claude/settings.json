@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(winget --version 2>&1)"
+    ]
+  }
+}
