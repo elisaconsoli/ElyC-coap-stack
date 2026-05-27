@@ -21,12 +21,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 3. Login su Docker Hub con i segreti della repo GitHub
+      # 3. Login su Docker Hub con variable (username) e secret (password)
       - name: Login su Docker Hub
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
       # 4. Build e push: due tag — latest e SHA del commit
       - name: Build e push immagine sensore
@@ -36,5 +36,5 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/coap-sensor:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/coap-sensor:${{ github.sha }}
+            ${{ vars.DOCKERHUB_USERNAME }}/coap-sensor:latest
+            ${{ vars.DOCKERHUB_USERNAME }}/coap-sensor:${{ github.sha }}
